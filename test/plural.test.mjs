@@ -82,7 +82,44 @@ test("countOf: explicit plural passes through", () => {
 });
 
 test("countOf: large counts get locale separators", () => {
-  assert.equal(countOf(1234, "item"), "1,234 items");
+  // Compare against the same locale-sensitive formatter the implementation uses —
+  // hard-coding "1,234" fails in a non-US-locale environment.
+  assert.equal(countOf(1234, "item"), `${new Intl.NumberFormat().format(1234)} items`);
+});
+
+// These are the words a naive -f$/-o$ regex gets wrong. A helper that mangles
+// ordinary English is worse than the ternary it replaces.
+test("plural: -f words that do NOT take -ves", () => {
+  assert.equal(plural(2, "chef"), "chefs");
+  assert.equal(plural(2, "roof"), "roofs");
+  assert.equal(plural(2, "belief"), "beliefs");
+  assert.equal(plural(2, "proof"), "proofs");
+  assert.equal(plural(2, "brief"), "briefs");
+});
+
+test("plural: -f words that DO take -ves", () => {
+  assert.equal(plural(2, "leaf"), "leaves");
+  assert.equal(plural(2, "knife"), "knives");
+  assert.equal(plural(2, "shelf"), "shelves");
+  assert.equal(plural(2, "wolf"), "wolves");
+});
+
+test("plural: -o words that do NOT take -es", () => {
+  assert.equal(plural(2, "cello"), "cellos");
+  assert.equal(plural(2, "avocado"), "avocados");
+  assert.equal(plural(2, "video"), "videos");
+  assert.equal(plural(2, "photo"), "photos");
+  assert.equal(plural(2, "logo"), "logos");
+});
+
+test("plural: -o words that DO take -es", () => {
+  assert.equal(plural(2, "potato"), "potatoes");
+  assert.equal(plural(2, "tomato"), "tomatoes");
+  assert.equal(plural(2, "hero"), "heroes");
+});
+
+test("plural: -ves allow-list preserves capitalization", () => {
+  assert.equal(plural(2, "Leaf"), "Leaves");
 });
 
 test("countOf: output never contains the prohibited (s) crutch", () => {

@@ -9,6 +9,6 @@
  * Zero runtime dependencies. `@raycast/api` is a peer.
  */
 
-export { getErrorMessage, isAbortError } from "./errors";
+export { getErrorMessage, isAbortError, redactSecrets } from "./errors";
 export { showError, buildClipboardText, COPY_ERROR_TITLE, type ShowErrorOptions } from "./toast";
 export { countOf, plural, type CountOptions } from "./plural";

@@ -13,7 +13,7 @@
 
 import { Clipboard, Toast, showToast } from "@raycast/api";
 
-import { getErrorMessage, isAbortError } from "./errors";
+import { getErrorMessage, isAbortError, redactSecrets } from "./errors";
 
 /** Title of the always-present copy action. Fixed so it's greppable fleet-wide. */
 export const COPY_ERROR_TITLE = "Copy Error";
@@ -124,12 +124,24 @@ export function buildClipboardText(input: {
   // A stack is the single most useful thing in a bug report — include it when the
   // thrown value actually had one, and drop the redundant first line (which is
   // just "Error: <message>").
-  if (error instanceof Error && error.stack) {
-    const frames = error.stack.split("\n").slice(1).join("\n").trimEnd();
-    if (frames) {
-      parts.push(frames);
+  if (error instanceof Error) {
+    let stack: unknown;
+    try {
+      stack = error.stack;
+    } catch {
+      stack = undefined;
+    }
+    if (typeof stack === "string") {
+      const frames = stack.split("\n").slice(1).join("\n").trimEnd();
+      if (frames) {
+        parts.push(frames);
+      }
     }
   }
 
-  return parts.join("\n\n");
+  // Redact the WHOLE payload, not just the message. `copyContext` is caller-supplied
+  // (a URL with a token in the query string is the obvious hazard) and a stack frame
+  // can embed a credential-bearing path — neither passes through `getErrorMessage`,
+  // so this is the only place they get scrubbed before reaching the clipboard.
+  return redactSecrets(parts.join("\n\n"));
 }

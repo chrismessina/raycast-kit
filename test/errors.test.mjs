@@ -4,7 +4,7 @@ import { test } from "node:test";
 // Import the LEAF module, not the barrel: `index.js` re-exports `toast.js`, which
 // requires `@raycast/api` — a package with no loadable runtime outside Raycast.
 // These helpers are pure TypeScript and must stay testable (and importable) without it.
-import { getErrorMessage, isAbortError } from "../dist/errors.js";
+import { getErrorMessage, isAbortError, redactSecrets } from "../dist/errors.js";
 
 test("getErrorMessage: Error instance returns its message", () => {
   assert.equal(getErrorMessage(new Error("Boom")), "Boom");
@@ -91,6 +91,80 @@ test("isAbortError: a real failure is not an abort", () => {
   assert.equal(isAbortError(new Error("500 Internal Server Error")), false);
   assert.equal(isAbortError("AbortError"), false);
   assert.equal(isAbortError(null), false);
+});
+
+// An error handler that throws replaces the user's real failure with an unrelated
+// one, and the toast never renders. Hostile shapes are rare but real.
+test("getErrorMessage: a throwing getter does not escape", () => {
+  const hostile = {
+    get message() {
+      throw new Error("second failure");
+    },
+  };
+  assert.doesNotThrow(() => getErrorMessage(hostile));
+  assert.equal(getErrorMessage(hostile), "An unknown error occurred.");
+});
+
+test("getErrorMessage: a Proxy that throws on every read does not escape", () => {
+  const proxy = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("proxy trap");
+      },
+    },
+  );
+  assert.doesNotThrow(() => getErrorMessage(proxy));
+});
+
+test("getErrorMessage: an Error subclass with a throwing message getter is handled", () => {
+  class Hostile extends Error {
+    get message() {
+      throw new Error("nope");
+    }
+  }
+  assert.doesNotThrow(() => getErrorMessage(new Hostile()));
+});
+
+// showError puts this text in a toast AND on the clipboard — a screenshot or a
+// pasted bug report must not carry a live credential.
+test("getErrorMessage: redacts credentials from a realistic SDK 401 payload", () => {
+  const apiError = {
+    status: 401,
+    headers: { authorization: "Bearer sk-ant-api03-REALKEYMATERIAL1234567890" },
+    request: { headers: { "x-api-key": "sk-ant-SECRETVALUE0987654321" } },
+  };
+  const output = getErrorMessage(apiError);
+
+  assert.doesNotMatch(output, /REALKEYMATERIAL/, "bearer token leaked");
+  assert.doesNotMatch(output, /SECRETVALUE/, "api key leaked");
+});
+
+test("redactSecrets: masks the common credential shapes", () => {
+  assert.doesNotMatch(redactSecrets("Authorization: Bearer abcdef1234567890xyz"), /abcdef1234567890xyz/);
+  assert.doesNotMatch(redactSecrets('"api_key": "supersecretvalue123"'), /supersecretvalue123/);
+  assert.doesNotMatch(redactSecrets("token=abc123def456ghi789"), /abc123def456ghi789/);
+  assert.doesNotMatch(redactSecrets("contact user@example.com"), /^.*[^u]user@example\.com/);
+});
+
+test("redactSecrets: leaves ordinary error text intact", () => {
+  const plain = "Couldn't reach the server (503). Try again in a moment.";
+  assert.equal(redactSecrets(plain), plain);
+});
+
+// A thrown HTTP error can carry an entire response body; a 50 KB toast is not a toast.
+test("getErrorMessage: clamps enormous payloads", () => {
+  const huge = { data: "x".repeat(50_000) };
+  const output = getErrorMessage(huge);
+
+  assert.ok(output.length < 1000, `expected clamped output, got ${output.length} chars`);
+  assert.match(output, /truncated/);
+});
+
+test("getErrorMessage: handles bigint and symbol without throwing", () => {
+  assert.doesNotThrow(() => getErrorMessage(Symbol("rate-limited")));
+  assert.equal(getErrorMessage(10n), "10");
+  assert.equal(getErrorMessage(Symbol("rate-limited")), "rate-limited");
 });
 
 test("isAbortError: matches what a real AbortController throws", async () => {

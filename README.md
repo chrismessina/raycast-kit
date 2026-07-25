@@ -83,6 +83,21 @@ getErrorMessage(null)                     // "An unknown error occurred."
 `String(error)` on a plain object yields `"[object Object]"`, which is the useless
 message users actually report. This never does that.
 
+**Credentials are redacted, and output is capped.** `showError` puts this text in a
+toast *and* on the clipboard, so it can end up in a screenshot or pasted into a
+GitHub issue. A thrown SDK error routinely carries an `authorization` header or an
+`x-api-key` — a realistic Anthropic 401 payload was putting a live `sk-ant-…` key
+into both before this was added. Bearer tokens, labeled secrets, provider-shaped
+keys (`sk-…`, `ghp_…`, `xoxb-…`), and email addresses are masked; output is clamped
+to 800 characters, because a 50 KB response body is not a toast. `redactSecrets` is
+exported if you need it directly. This mirrors the redaction in
+[`raycast-logger`](https://github.com/chrismessina/raycast-logger) — deliberately,
+since both packages protect the same secrets from the same payloads.
+
+**It cannot throw.** Every property read goes through a guarded accessor: a hostile
+value (`{ get message() { throw … } }`, a Proxy that traps every read) returns the
+generic message rather than replacing the user's real failure with an unrelated one.
+
 ## `isAbortError(error: unknown)`
 
 ```ts
@@ -118,6 +133,14 @@ countOf(1234, "item")                        // "1,234 items"
 
 `plural(count, singular, pluralForm?)` is exported separately when you need only
 the noun.
+
+**On the `-f` and `-o` classes:** these use allow-lists, not regex rules, because
+English splits them with no reliable pattern — `leaf`→`leaves` but `chef`→`chefs`,
+`roof`→`roofs`, `belief`→`beliefs`; `potato`→`potatoes` but `cello`→`cellos`,
+`avocado`→`avocados`. A naive `-f$`/`-o$` rule produces *"cheves"*, *"rooves"*,
+*"believes"*, and *"celloes"* — and a helper that mangles ordinary words is worse
+than the ternary it replaces. Anything outside the lists takes a plain `-s`; pass
+an explicit plural for the rest.
 
 ## Importing without `@raycast/api`
 

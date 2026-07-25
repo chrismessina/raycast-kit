@@ -79,17 +79,45 @@ function pluralizeWord(word: string): string {
   if (/[^aeiou]y$/i.test(word)) {
     return `${word.slice(0, -1)}ies`;
   }
-  // consonant + o → "es"  (potato → potatoes, but video → videos)
-  if (/[^aeiou]o$/i.test(word) && !/(?:photo|piano|halo|solo|video|memo|logo|auto|pro)$/i.test(word)) {
-    return `${word}es`;
+  // -f / -fe → "ves" ONLY for the words where it's actually right.
+  //
+  // Deliberately an allow-list, not a rule. English splits this class with no
+  // reliable pattern — `leaf`→`leaves` but `chef`→`chefs`, `roof`→`roofs`,
+  // `belief`→`beliefs`, `proof`→`proofs`. A regex over `-f$` gets those four
+  // wrong ("cheves", "rooves", "believes", "prooves"), and a helper that mangles
+  // ordinary words is worse than the ternary it replaces.
+  if (F_TO_VES.has(lower)) {
+    return matchCase(word, `${lower.replace(/fe?$/, "")}ves`);
   }
-  // -f / -fe → "ves"  (leaf → leaves, life → lives)
-  if (/(?:[^f]f|fe)$/i.test(word)) {
-    return `${word.replace(/fe?$/i, "")}ves`;
+  // -o is the same story: `potato`→`potatoes` but `cello`/`avocado`/`photo`→`-s`.
+  // The `-es` set is small and closed; everything else takes a plain "s".
+  if (O_TO_ES.has(lower)) {
+    return `${word}es`;
   }
 
   return `${word}s`;
 }
+
+/** The `-f`/`-fe` nouns that genuinely take `-ves`. Everything else takes `-s`. */
+const F_TO_VES = new Set([
+  "leaf",
+  "loaf",
+  "thief",
+  "shelf",
+  "self",
+  "half",
+  "calf",
+  "wolf",
+  "knife",
+  "life",
+  "wife",
+  "elf",
+  "scarf",
+  "wharf",
+]);
+
+/** The `-o` nouns that genuinely take `-es`. Everything else takes `-s`. */
+const O_TO_ES = new Set(["potato", "tomato", "hero", "echo", "veto", "torpedo", "embargo"]);
 
 /** Preserve the casing style of the original word on its replacement. */
 function matchCase(original: string, replacement: string): string {
