@@ -101,6 +101,54 @@ export async function showError(error: unknown, options: ShowErrorOptions): Prom
 }
 
 /**
+ * Turn an EXISTING toast into a compliant failure toast, in place.
+ *
+ * The progress-toast pattern — show an animated toast, then flip it to Success or
+ * Failure when the work settles — cannot use `showError`, which creates a *new*
+ * toast. Mutation sites are common in the fleet (3 of 4 failure paths in
+ * `get-app-icon`, both stream handlers in the `claude` extension) and were exactly
+ * the sites that had no Copy-Error action, because attaching one by hand takes six
+ * extra lines every time.
+ *
+ * @returns `true` if the toast was turned into a failure, `false` for an ignored abort.
+ *
+ * @example
+ * const toast = await showToast({ style: Toast.Style.Animated, title: "Exporting…" });
+ * try {
+ *   await exportIcons();
+ *   toast.style = Toast.Style.Success;
+ *   toast.title = "Exported";
+ * } catch (error) {
+ *   failToast(toast, error, { title: `Failed to export ${app.name}'s icons` });
+ * }
+ */
+export function failToast(toast: Toast, error: unknown, options: ShowErrorOptions): boolean {
+  const { title, message, action, copyContext, ignoreAbort = true } = options;
+
+  if (ignoreAbort && isAbortError(error)) {
+    return false;
+  }
+
+  const errorMessage = message ?? getErrorMessage(error);
+  const clipboardText = buildClipboardText({ title, errorMessage, error, copyContext });
+
+  toast.style = Toast.Style.Failure;
+  toast.title = title;
+  toast.message = errorMessage;
+  toast.primaryAction = {
+    title: COPY_ERROR_TITLE,
+    onAction: () => {
+      void Clipboard.copy(clipboardText).catch(() => undefined);
+    },
+  };
+  if (action) {
+    toast.secondaryAction = action;
+  }
+
+  return true;
+}
+
+/**
  * Assemble the clipboard payload. Exported for testing; not part of the public
  * surface you'd normally reach for.
  */

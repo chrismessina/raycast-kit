@@ -10,5 +10,5 @@
  */
 
 export { getErrorMessage, isAbortError, redactSecrets } from "./errors";
-export { showError, buildClipboardText, COPY_ERROR_TITLE, type ShowErrorOptions } from "./toast";
+export { showError, failToast, buildClipboardText, COPY_ERROR_TITLE, type ShowErrorOptions } from "./toast";
 export { countOf, plural, type CountOptions } from "./plural";

@@ -32,7 +32,7 @@ Module._load = function (request, parent, isMain) {
   return originalLoad.call(this, request, parent, isMain);
 };
 
-const { showError, buildClipboardText, COPY_ERROR_TITLE } = await import("../dist/index.js");
+const { showError, failToast, buildClipboardText, COPY_ERROR_TITLE } = await import("../dist/index.js");
 
 function reset() {
   calls.toasts.length = 0;
@@ -133,6 +133,70 @@ test("showError: returns the toast for later mutation", async () => {
   const toast = await showError(new Error("boom"), { title: "Failed" });
   assert.ok(toast);
   assert.equal(toast.style, "FAILURE");
+});
+
+// The progress-toast pattern: an animated toast flipped to Failure in place.
+// showError can't serve these sites because it creates a NEW toast.
+test("failToast: mutates an existing toast into a compliant failure", () => {
+  const toast = { style: "ANIMATED", title: "Exporting…" };
+  const result = failToast(toast, new Error("disk full"), { title: "Export Failed" });
+
+  assert.equal(result, true);
+  assert.equal(toast.style, "FAILURE");
+  assert.equal(toast.title, "Export Failed");
+  assert.equal(toast.message, "disk full");
+  assert.equal(toast.primaryAction.title, COPY_ERROR_TITLE);
+});
+
+test("failToast: Copy Error action copies the payload", async () => {
+  reset();
+  const toast = { style: "ANIMATED", title: "Working…" };
+  failToast(toast, new Error("copy this"), { title: "Failed" });
+
+  toast.primaryAction.onAction();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(calls.copies.length, 1);
+  assert.match(calls.copies[0], /copy this/);
+});
+
+test("failToast: unwraps non-Error values like showError does", () => {
+  const toast = {};
+  failToast(toast, { statusText: "Not Found" }, { title: "Failed" });
+  assert.equal(toast.message, "Not Found");
+
+  const toast2 = {};
+  failToast(toast2, { a: 1 }, { title: "Failed" });
+  assert.doesNotMatch(toast2.message, /\[object Object\]/);
+});
+
+test("failToast: leaves the toast untouched on an ignored abort", () => {
+  const abort = new Error("aborted");
+  abort.name = "AbortError";
+  const toast = { style: "ANIMATED", title: "Working…" };
+
+  const result = failToast(toast, abort, { title: "Failed" });
+
+  assert.equal(result, false);
+  assert.equal(toast.style, "ANIMATED", "an aborted request must not flip the toast");
+  assert.equal(toast.title, "Working…");
+});
+
+test("failToast: attaches a secondary action when given", () => {
+  const toast = {};
+  failToast(toast, new Error("x"), { title: "Failed", action: { title: "Retry", onAction() {} } });
+  assert.equal(toast.secondaryAction.title, "Retry");
+});
+
+test("failToast: redacts credentials into the clipboard payload", async () => {
+  reset();
+  const toast = {};
+  failToast(toast, { headers: { authorization: "Bearer sk-ant-LEAKED1234567890abc" } }, { title: "Failed" });
+
+  toast.primaryAction.onAction();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.doesNotMatch(calls.copies[0], /LEAKED1234567890abc/);
 });
 
 test("buildClipboardText: includes title, message, and context", () => {

@@ -65,6 +65,28 @@ await showError(error, {
   `ignoreAbort: false` to opt out.
 - Returns the `Toast` (so you can mutate it later), or `undefined` for an ignored abort.
 
+## `failToast(toast, error, options)`
+
+The progress-toast pattern — show an animated toast, then flip it when the work
+settles — cannot use `showError`, which creates a *new* toast. `failToast` mutates
+an existing one in place, with the same Copy-Error guarantee.
+
+```ts
+const toast = await showToast({ style: Toast.Style.Animated, title: "Exporting…" });
+try {
+  await exportIcons();
+  toast.style = Toast.Style.Success;
+  toast.title = "Exported";
+} catch (error) {
+  failToast(toast, error, { title: `Failed to export ${app.name}'s icons` });
+}
+```
+
+Returns `true` if the toast was turned into a failure, `false` for an ignored
+abort (in which case the toast is left untouched). These mutation sites are
+exactly where Copy-Error actions went missing in the fleet — attaching one by
+hand costs six lines every time.
+
 ## `getErrorMessage(error: unknown)`
 
 The one canonical unwrap. Replaces the `instanceof Error` ternary, and handles
