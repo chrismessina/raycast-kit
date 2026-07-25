@@ -29,6 +29,9 @@
     "prepublishOnly": "npm run build && npm test",
     "clean": "rm -rf dist"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "raycast",
     "raycast-extension",

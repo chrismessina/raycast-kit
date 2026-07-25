@@ -181,7 +181,7 @@ The root export includes `showError` and therefore requires the Raycast runtime.
 ```bash
 npm install
 npm run build      # tsc → dist/
-npm test           # node --test (47 tests)
+npm test           # node --test (66 tests)
 npm run typecheck  # tsc --noEmit
 ```
 
