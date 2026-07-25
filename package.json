@@ -1,0 +1,58 @@
+{
+  "name": "@chrismessina/raycast-kit",
+  "version": "0.1.0",
+  "description": "House-style primitives for Raycast extensions: failure toasts that always carry a Copy Error action, safe error unwrapping, and count-aware copy",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
+    "./plural": {
+      "types": "./dist/plural.d.ts",
+      "default": "./dist/plural.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "raycast",
+    "raycast-extension",
+    "toast",
+    "error-handling",
+    "pluralize",
+    "house-style"
+  ],
+  "author": "Chris Messina",
+  "license": "MIT",
+  "peerDependencies": {
+    "@raycast/api": "^1.0.0"
+  },
+  "devDependencies": {
+    "@raycast/api": "^1.83.2",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrismessina/raycast-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chrismessina/raycast-kit/issues"
+  },
+  "homepage": "https://github.com/chrismessina/raycast-kit#readme"
+}
