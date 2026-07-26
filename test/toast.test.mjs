@@ -199,6 +199,48 @@ test("failToast: redacts credentials into the clipboard payload", async () => {
   assert.doesNotMatch(calls.copies[0], /LEAKED1234567890abc/);
 });
 
+// Documented contract for the `message` override (JSDoc on ShowErrorOptions.message).
+// The first adopter assumed the override affected only the toast; it affects both.
+test("showError: an overridden message replaces the CLIPBOARD text too", async () => {
+  reset();
+  await showError(new Error("ENOENT: no such file or directory, realpath '/Users/x'"), {
+    title: "Folder Not Found",
+    message: "The folder has been moved, renamed, or deleted.",
+    copyContext: "/Users/x/Artifacts",
+  });
+
+  calls.toasts[0].primaryAction.onAction();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const copied = calls.copies[0];
+  assert.match(copied, /has been moved/, "override should reach the clipboard");
+  assert.match(copied, /Users\/x\/Artifacts/, "copyContext should survive the override");
+});
+
+test("showError: message:undefined uses the derived message (the ternary shape)", async () => {
+  reset();
+  const missing = false;
+  await showError(new Error("real cause"), {
+    title: "Failed",
+    message: missing ? "friendly text" : undefined,
+  });
+
+  assert.equal(calls.toasts[0].message, "real cause");
+});
+
+test("showError: copyContext is redacted like the rest of the payload", async () => {
+  reset();
+  await showError(new Error("boom"), {
+    title: "Failed",
+    copyContext: "GET https://api.example.com/x?api_key=SUPERSECRETVALUE123",
+  });
+
+  calls.toasts[0].primaryAction.onAction();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.doesNotMatch(calls.copies[0], /SUPERSECRETVALUE123/);
+});
+
 test("buildClipboardText: includes title, message, and context", () => {
   const text = buildClipboardText({
     title: "Search Failed",

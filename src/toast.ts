@@ -26,8 +26,28 @@ export interface ShowErrorOptions {
    */
   title: string;
   /**
-   * Overrides the message derived from `error`. Rarely needed — prefer letting
-   * `getErrorMessage` unwrap the real thing so the user copies the true cause.
+   * Replaces the message derived from `error` — **in the toast AND on the clipboard.**
+   * Pass `undefined` to use the derived message (supported and intended, so a
+   * conditional override reads naturally as a ternary).
+   *
+   * Default to omitting it, so the user copies the true cause. The legitimate case is
+   * a raw message that names a *syscall* rather than anything actionable — e.g.
+   * `ENOENT: no such file or directory, realpath '/Users/…'`. Override the display,
+   * and put the diagnostic detail in `copyContext` so the bug report keeps it:
+   *
+   * ```ts
+   * const missing = getErrorMessage(error).includes("ENOENT");
+   * await showError(error, {
+   *   title: missing ? "Folder Not Found" : "Could Not Reveal in Finder",
+   *   message: missing ? "The folder has been moved, renamed, or deleted." : undefined,
+   *   copyContext: path,
+   * });
+   * ```
+   *
+   * **Note the trade-off:** overriding does NOT keep the original message on the
+   * clipboard. A thrown `Error` still contributes its stack frames, but a non-thrown
+   * or non-`Error` value leaves no trace of the raw text — so put anything you need
+   * for debugging in `copyContext`.
    */
   message?: string;
   /**
@@ -35,10 +55,20 @@ export interface ShowErrorOptions {
    * Copy Error stays primary; this becomes the secondary action.
    */
   action?: Toast.ActionOptions;
-  /**
-   * Extra context appended to what lands on the clipboard (not shown in the toast).
-   * Use for the request URL, status code, or command name — the things you'd ask
-   * for in a bug report anyway.
+   /**
+   * Extra context appended to what lands on the clipboard (**not** shown in the toast).
+   *
+   * This is how you keep a toast to one short line while the bug report still gets the
+   * detail. Anything you'd have to ask for in a follow-up belongs here:
+   *
+   * - a **filesystem path** (`/Users/…/Artifacts`) — the most useful case for a local
+   *   extension, and the thing a "Folder Not Found" toast must not spell out
+   * - a request URL + status (`GET https://api.example.com/x → 429`)
+   * - the command or item id the failure happened on
+   * - the version of an external binary you shelled out to
+   *
+   * Redacted like everything else on the clipboard, so a token in a query string
+   * won't survive.
    */
   copyContext?: string;
   /**

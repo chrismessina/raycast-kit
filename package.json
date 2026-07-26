@@ -1,6 +1,6 @@
 {
   "name": "@chrismessina/raycast-kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "House-style primitives for Raycast extensions: failure toasts that always carry a Copy Error action, safe error unwrapping, and count-aware copy",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,6 +16,10 @@
     "./plural": {
       "types": "./dist/plural.d.ts",
       "default": "./dist/plural.js"
+    },
+    "./toast": {
+      "types": "./dist/toast.d.ts",
+      "default": "./dist/toast.js"
     }
   },
   "files": [
