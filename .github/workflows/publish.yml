@@ -12,23 +12,33 @@ on:
   release:
     types: [created]
 
+# Two releases racing would both pass the "is it published?" check and one would
+# fail on a 403. Serialize instead.
+concurrency:
+  group: publish-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write # npm provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - run: npm ci
+      # --ignore-scripts: a compromised transitive dependency's install hook must not
+      # execute in this job at all. This package has zero runtime deps and its own
+      # build is invoked explicitly below, so nothing legitimate needs a lifecycle hook.
+      - run: npm ci --ignore-scripts
 
-      # Gate on the same checks that run locally. `npm publish` also fires these via
-      # prepublishOnly, but running them here fails the job with a readable log
-      # instead of a publish that dies mid-step.
+      # Build and test in TOKENLESS steps, before NODE_AUTH_TOKEN is ever in scope.
+      # Anything that could tamper with dist/ runs here, where there is no credential
+      # to steal; the publish step then ships the already-verified output.
       - run: npm run build
       - run: npm test
 
@@ -45,14 +55,33 @@ jobs:
           fi
           echo "version $PKG matches tag $TAG"
 
-      - name: Publish to npm
+      # Decide whether to publish BEFORE the token is in scope, and fail closed: a
+      # transient registry error must not fall through to a publish attempt.
+      - name: Check whether this version is already published
+        id: check
         run: |
-          VERSION="$(node -p "require('./package.json').version")"
           NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
           if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
-            echo "$NAME@$VERSION is already published — skipping."
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "$NAME@$VERSION is already published — will skip."
+          elif npm view "$NAME" version >/dev/null 2>&1; then
+            # Package exists, this version doesn't. Unambiguous: publish.
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          elif npm view "$NAME" version 2>&1 | grep -q "E404"; then
+            # Whole package is new (first publish).
+            echo "already=false" >> "$GITHUB_OUTPUT"
           else
-            npm publish --access public
+            echo "::error::Could not determine publish state for $NAME@$VERSION (registry unreachable?). Refusing to publish blind."
+            exit 1
           fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.already == 'false'
+        # --ignore-scripts here too: dist/ was built and tested in the tokenless steps
+        # above, so prepublishOnly re-running is redundant — and running ANY script in
+        # the one step that holds the credential is the thing worth avoiding.
+        # --provenance publishes a signed attestation linking the tarball to this run.
+        run: npm publish --access public --ignore-scripts --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

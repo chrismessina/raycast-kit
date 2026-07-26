@@ -135,6 +135,10 @@ abort (in which case the toast is left untouched). These mutation sites are
 exactly where Copy-Error actions went missing in the fleet — attaching one by
 hand costs six lines every time.
 
+**It clears a stale `secondaryAction`.** A progress toast usually carries a "Cancel"
+for the work that just failed; leaving it attached offers an action that no longer
+means anything. Pass `action` to set a new one (typically "Try Again").
+
 ## `getErrorMessage(error: unknown)`
 
 The one canonical unwrap. Replaces the `instanceof Error` ternary, and handles
@@ -161,7 +165,9 @@ into both before this was added. Masked: bearer tokens, labeled secrets
 (`api_key`/`token`/`password`/…), provider-shaped keys (`sk-…`, `ghp_…`, `xoxb-…`),
 **JWTs**, **PEM private-key blocks**, **AWS access key ids**, **credentials in a URL
 authority** (`postgres://user:pw@host`), and email addresses; output is clamped
-to 800 characters, because a 50 KB response body is not a toast. `redactSecrets` is
+to 800 characters, because a 50 KB response body is not a toast. **A `message` you
+pass yourself is redacted too** — it routinely interpolates error text, and an
+unredacted toast is screenshot-able. `redactSecrets` is
 exported if you need it directly. This mirrors the redaction in
 [`raycast-logger`](https://github.com/chrismessina/raycast-logger) — deliberately,
 since both packages protect the same secrets from the same payloads.
@@ -231,7 +237,7 @@ and the failure mode.
 ```bash
 npm install
 npm run build      # tsc → dist/
-npm test           # node --test (66 tests)
+npm test           # node --test (83 tests)
 npm run typecheck  # tsc --noEmit
 ```
 

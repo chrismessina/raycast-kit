@@ -57,18 +57,26 @@ export function redactSecrets(text: string): string {
     text
       // PEM private keys — mask the whole block, including its newlines. Must run
       // FIRST: the body is base64 that later rules would only partially rewrite.
+      // Covers "PRIVATE KEY", "RSA PRIVATE KEY", and PGP's "PRIVATE KEY BLOCK".
+      // The `[^-]{0,40}` header guard keeps this linear: without it, many unterminated
+      // BEGIN markers make the scan quadratic (measured 231ms at 168KB/6000 markers).
       .replace(
-        /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z ]+ )?PRIVATE KEY-----/g,
+        /-----BEGIN [^-\n]{0,40}PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END [^-\n]{0,40}PRIVATE KEY(?: BLOCK)?-----/g,
         "-----BEGIN PRIVATE KEY----- *** -----END PRIVATE KEY-----",
       )
       // JWTs — three base64url segments. Before the bearer rule, so a bare token
       // (not preceded by "Bearer") is still caught.
       .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+/g, "eyJ***")
+      // HTTP auth schemes carrying a credential. `Basic dXNlcjpwYXNz` base64-decodes
+      // to `user:pass`, so masking only the scheme word would be worse than useless.
+      .replace(/\b(Basic|Digest|Negotiate|NTLM|Token|ApiKey)\s+[A-Za-z0-9+/=._\-~]{8,}/gi, "$1 ***")
       // Bearer tokens, in headers or JSON.
       .replace(/(bearer\s+)[\w.\-~+/]+=*/gi, "$1***")
       // key/value secrets: "api_key": "...", x-api-key=..., token: ...
+      // The value class allows an ESCAPED quote (\") so a JSON string containing one
+      // is masked whole — `"api_key":"alpha\"bravo"` used to leak `bravo`.
       .replace(
-        /("?\b(?:[\w-]*(?:api[_-]?key|secret|token|password|passwd|pwd|auth(?:orization)?|credential|session)[\w-]*)\b"?\s*[:=]\s*"?)([^"',}\s]+)/gi,
+        /("?\b(?:[\w-]*(?:api[_-]?key|secret|token|password|passwd|pwd|auth(?:orization)?|credential|session)[\w-]*)\b"?\s*[:=]\s*"?)((?:\\.|[^"',}\s\\])+)/gi,
         "$1***",
       )
       // Provider-shaped keys that appear bare (no label): sk-…, ghp_…, xoxb-…

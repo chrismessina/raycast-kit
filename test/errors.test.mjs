@@ -181,6 +181,37 @@ test("redactSecrets: masks credentials embedded in URLs and connection strings",
   assert.doesNotMatch(redactSecrets("redis://:justapassword@localhost:6379"), /justapassword/);
 });
 
+// `Basic dXNlcjpwYXNz` base64-decodes to `user:pass`. Masking only the scheme word
+// is worse than useless — it looks redacted while the credential sits beside it.
+test("redactSecrets: masks the credential after an HTTP auth scheme, not just the word", () => {
+  const out = redactSecrets("Authorization: Basic dXNlcjpwYXNz");
+  assert.doesNotMatch(out, /dXNlcjpwYXNz/);
+
+  for (const scheme of ["Digest", "NTLM", "Token", "ApiKey"]) {
+    assert.doesNotMatch(redactSecrets(`Authorization: ${scheme} abcdef1234567890`), /abcdef1234567890/);
+  }
+});
+
+test("redactSecrets: masks PGP private key blocks", () => {
+  const pgp = "-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQOYBFxyz123\n-----END PGP PRIVATE KEY BLOCK-----";
+  assert.doesNotMatch(redactSecrets(pgp), /lQOYBFxyz123/);
+});
+
+// A JSON string containing an escaped quote ended the value class early, leaking
+// everything after it: `"api_key":"alpha\"bravo"` → `"***"bravo"`.
+test("redactSecrets: masks a quoted value containing an escaped quote", () => {
+  const out = redactSecrets('"api_key":"alpha\\"bravo"');
+  assert.doesNotMatch(out, /bravo/);
+});
+
+test("redactSecrets: many unterminated PEM headers stay linear", () => {
+  const evil = "-----BEGIN RSA PRIVATE KEY-----\n".repeat(6000);
+  const start = Date.now();
+  redactSecrets(evil);
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed < 1000, `PEM scan took ${elapsed}ms on 6000 unterminated markers`);
+});
+
 test("redactSecrets: a URL with no credentials is left alone", () => {
   const url = "https://api.example.com/v1/items?limit=20";
   assert.equal(redactSecrets(url), url);

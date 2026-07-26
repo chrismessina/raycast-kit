@@ -241,6 +241,44 @@ test("showError: copyContext is redacted like the rest of the payload", async ()
   assert.doesNotMatch(calls.copies[0], /SUPERSECRETVALUE123/);
 });
 
+// The override bypassed redaction entirely: a caller interpolating error text into
+// `message` put a live credential in a screenshot-able toast. The clipboard path was
+// already safe, which is exactly why this was easy to miss.
+test("showError: an overridden message is REDACTED before display", async () => {
+  reset();
+  await showError(new Error("x"), {
+    title: "Failed",
+    message: "Authorization: Basic dXNlcjpwYXNz and token=SUPERSECRET123456",
+  });
+
+  assert.doesNotMatch(calls.toasts[0].message, /SUPERSECRET123456/);
+  assert.doesNotMatch(calls.toasts[0].message, /dXNlcjpwYXNz/);
+});
+
+test("failToast: an overridden message is REDACTED before display", () => {
+  const toast = {};
+  failToast(toast, new Error("x"), {
+    title: "Failed",
+    message: "token=SUPERSECRET123456",
+  });
+
+  assert.doesNotMatch(toast.message, /SUPERSECRET123456/);
+});
+
+// A progress toast usually carries a "Cancel" for the work that just failed.
+// Leaving it attached offers an action that no longer means anything.
+test("failToast: clears a stale secondaryAction when no new action is given", () => {
+  const toast = {
+    style: "ANIMATED",
+    title: "Exporting…",
+    secondaryAction: { title: "Cancel", onAction() {} },
+  };
+
+  failToast(toast, new Error("disk full"), { title: "Export Failed" });
+
+  assert.equal(toast.secondaryAction, undefined);
+});
+
 test("buildClipboardText: includes title, message, and context", () => {
   const text = buildClipboardText({
     title: "Search Failed",

@@ -104,7 +104,10 @@ export async function showError(error: unknown, options: ShowErrorOptions): Prom
     return undefined;
   }
 
-  const errorMessage = message ?? getErrorMessage(error);
+  // A caller-supplied `message` is redacted too — it routinely interpolates error
+  // text, and an unredacted toast is screenshot-able even though the clipboard path
+  // is already safe.
+  const errorMessage = message === undefined ? getErrorMessage(error) : redactSecrets(message);
 
   // What the user copies: the message, plus context, plus a stack when we have one.
   // Built once here rather than inside onAction so the closure can't capture a
@@ -159,7 +162,10 @@ export function failToast(toast: Toast, error: unknown, options: ShowErrorOption
     return false;
   }
 
-  const errorMessage = message ?? getErrorMessage(error);
+  // A caller-supplied `message` is redacted too — it routinely interpolates error
+  // text, and an unredacted toast is screenshot-able even though the clipboard path
+  // is already safe.
+  const errorMessage = message === undefined ? getErrorMessage(error) : redactSecrets(message);
   const clipboardText = buildClipboardText({ title, errorMessage, error, copyContext });
 
   toast.style = Toast.Style.Failure;
@@ -171,9 +177,12 @@ export function failToast(toast: Toast, error: unknown, options: ShowErrorOption
       void Clipboard.copy(clipboardText).catch(() => undefined);
     },
   };
-  if (action) {
-    toast.secondaryAction = action;
-  }
+  // Always ASSIGN, never conditionally skip: the toast being mutated is usually a
+  // progress toast that already carries a secondaryAction (a "Cancel" for the work
+  // that just failed). Leaving it attached offers the user an action that no longer
+  // means anything. `Toast.secondaryAction` accepts `undefined`, so clearing is
+  // supported.
+  toast.secondaryAction = action;
 
   return true;
 }
