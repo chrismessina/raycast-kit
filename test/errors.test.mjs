@@ -147,6 +147,70 @@ test("redactSecrets: masks the common credential shapes", () => {
   assert.doesNotMatch(redactSecrets("contact user@example.com"), /^.*[^u]user@example\.com/);
 });
 
+// Credential shapes that a naive label/bearer-only redactor lets through. Each of
+// these LEAKED in v0.1.0 and was found by attacking the function rather than by
+// waiting for a report.
+test("redactSecrets: masks JWTs, including unlabeled ones", () => {
+  const jwt =
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+  assert.doesNotMatch(redactSecrets(jwt), /dBjftJeZ/);
+  assert.doesNotMatch(redactSecrets(`Authorization: Bearer ${jwt}`), /dBjftJeZ/);
+});
+
+test("redactSecrets: masks PEM private key blocks including the body", () => {
+  const pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA7f2K\n-----END RSA PRIVATE KEY-----";
+  const out = redactSecrets(pem);
+  assert.doesNotMatch(out, /MIIEowIBAAKCAQEA/);
+
+  const ec = "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIB\n-----END EC PRIVATE KEY-----";
+  assert.doesNotMatch(redactSecrets(ec), /MHcCAQEEIB/);
+});
+
+test("redactSecrets: masks bare AWS access key ids", () => {
+  assert.doesNotMatch(redactSecrets("AKIAIOSFODNN7EXAMPLE"), /IOSFODNN7EXAMPLE/);
+  assert.doesNotMatch(redactSecrets("ASIAY34FZKBOKMUTVV7A"), /Y34FZKBOKMUTVV7A/);
+});
+
+test("redactSecrets: masks credentials embedded in URLs and connection strings", () => {
+  // A dotted host is caught by the email rule; a dotless one (`db:5432`) is not —
+  // which is why the URL-authority rule exists.
+  assert.doesNotMatch(redactSecrets("https://chris:sup3rs3cr3tpass@api.example.com/v1"), /sup3rs3cr3tpass/);
+  assert.doesNotMatch(redactSecrets("postgres://admin:hunter2hunter2@db:5432/prod"), /hunter2hunter2/);
+  assert.doesNotMatch(redactSecrets("mongodb+srv://user:p%40ssw0rd@cluster0.mongodb.net"), /p%40ssw0rd/);
+  // Empty username is a real shape (redis), so the pattern must not require one.
+  assert.doesNotMatch(redactSecrets("redis://:justapassword@localhost:6379"), /justapassword/);
+});
+
+test("redactSecrets: a URL with no credentials is left alone", () => {
+  const url = "https://api.example.com/v1/items?limit=20";
+  assert.equal(redactSecrets(url), url);
+});
+
+// Redaction must run BEFORE clamping, or truncation could cut a secret in half and
+// leave the first part readable.
+test("getErrorMessage: a secret near the clamp boundary is still masked", () => {
+  const out = getErrorMessage({
+    note: "x".repeat(770),
+    authorization: "Bearer sk-ant-REALKEYMATERIAL0987654321",
+  });
+  assert.doesNotMatch(out, /REALKEYMATERIAL/);
+});
+
+// These patterns run on arbitrary error payloads; a pathological input must not hang
+// the extension.
+test("redactSecrets: no catastrophic backtracking on adversarial input", () => {
+  const inputs = [
+    "eyJ" + "A".repeat(5000),
+    "-----BEGIN RSA PRIVATE KEY-----\n" + "A".repeat(20000),
+    "Bearer abc ".repeat(3000),
+    `{"token":"${"a".repeat(10000)}"}`,
+  ];
+  const start = Date.now();
+  for (const input of inputs) redactSecrets(input);
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed < 2000, `redaction took ${elapsed}ms on adversarial input`);
+});
+
 test("redactSecrets: leaves ordinary error text intact", () => {
   const plain = "Couldn't reach the server (503). Try again in a moment.";
   assert.equal(redactSecrets(plain), plain);

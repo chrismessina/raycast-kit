@@ -157,8 +157,10 @@ message users actually report. This never does that.
 toast *and* on the clipboard, so it can end up in a screenshot or pasted into a
 GitHub issue. A thrown SDK error routinely carries an `authorization` header or an
 `x-api-key` — a realistic Anthropic 401 payload was putting a live `sk-ant-…` key
-into both before this was added. Bearer tokens, labeled secrets, provider-shaped
-keys (`sk-…`, `ghp_…`, `xoxb-…`), and email addresses are masked; output is clamped
+into both before this was added. Masked: bearer tokens, labeled secrets
+(`api_key`/`token`/`password`/…), provider-shaped keys (`sk-…`, `ghp_…`, `xoxb-…`),
+**JWTs**, **PEM private-key blocks**, **AWS access key ids**, **credentials in a URL
+authority** (`postgres://user:pw@host`), and email addresses; output is clamped
 to 800 characters, because a 50 KB response body is not a toast. `redactSecrets` is
 exported if you need it directly. This mirrors the redaction in
 [`raycast-logger`](https://github.com/chrismessina/raycast-logger) — deliberately,

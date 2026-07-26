@@ -55,6 +55,15 @@ function clamp(text: string): string {
 export function redactSecrets(text: string): string {
   return (
     text
+      // PEM private keys — mask the whole block, including its newlines. Must run
+      // FIRST: the body is base64 that later rules would only partially rewrite.
+      .replace(
+        /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z ]+ )?PRIVATE KEY-----/g,
+        "-----BEGIN PRIVATE KEY----- *** -----END PRIVATE KEY-----",
+      )
+      // JWTs — three base64url segments. Before the bearer rule, so a bare token
+      // (not preceded by "Bearer") is still caught.
+      .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+/g, "eyJ***")
       // Bearer tokens, in headers or JSON.
       .replace(/(bearer\s+)[\w.\-~+/]+=*/gi, "$1***")
       // key/value secrets: "api_key": "...", x-api-key=..., token: ...
@@ -65,6 +74,14 @@ export function redactSecrets(text: string): string {
       // Provider-shaped keys that appear bare (no label): sk-…, ghp_…, xoxb-…
       .replace(/\b(sk|pk|rk)-[A-Za-z0-9_-]{16,}/g, "$1-***")
       .replace(/\b(gh[pousr]|xox[baprs])[-_][A-Za-z0-9_-]{16,}/g, "$1_***")
+      // AWS access key IDs are bare and unlabeled by design (AKIA…/ASIA…).
+      .replace(/\b(A(?:KIA|SIA|GPA|IDA|ROA|IPA|NPA|NVA))[A-Z0-9]{12,}/g, "$1***")
+      // Credentials in a URL authority: scheme://user:password@host. Covers hosts the
+      // email rule can't see — `db:5432` has no dot, so a connection string like
+      // `postgres://admin:hunter2@db:5432/prod` would otherwise pass through intact.
+      // `[^\s/:@]*` (not `+`) so an empty username still matches — `redis://:pw@host`
+      // is a real shape.
+      .replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]*:)[^\s/@]+(@)/gi, "$1***$2")
       // Email addresses → first char + domain.
       .replace(
         /(?<![A-Za-z0-9._%+-])([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g,
