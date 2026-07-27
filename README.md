@@ -3,7 +3,54 @@
 House-style primitives for Raycast extensions. Zero runtime dependencies;
 `@raycast/api` is a peer.
 
+<div align="center">
+  <a href="https://github.com/chrismessina">
+    <img src="https://img.shields.io/github/followers/chrismessina?label=Follow%20chrismessina&style=social" alt="Follow @chrismessina">
+  </a>
+  <a href="https://github.com/chrismessina/raycast-kit/stargazers">
+    <img src="https://img.shields.io/github/stars/chrismessina/raycast-kit?style=social" alt="Stars">
+  </a>
+</div>
+
 Companion to [`@chrismessina/raycast-logger`](https://github.com/chrismessina/raycast-logger).
+
+## Install
+
+```bash
+npm install @chrismessina/raycast-kit
+```
+
+## At a glance
+
+```ts
+import { showError, failToast } from "@chrismessina/raycast-kit";
+import { getErrorMessage, isAbortError } from "@chrismessina/raycast-kit/errors";
+import { countOf } from "@chrismessina/raycast-kit/plural";
+
+await showError(error, { title: "Couldn't Load Devices" });  // toast + Copy Error, redacted
+failToast(toast, error, { title: "Export Failed" });         // same, on an existing toast
+getErrorMessage(error);                                      // never "[object Object]"
+countOf(1, "device");                                        // "1 device", not "1 devices"
+```
+
+> **One rule before your first import:** UI code imports the root; **pure logic and
+> tests import the subpaths** (`/errors`, `/plural`). `@raycast/api` is types-only and
+> won't resolve outside the Raycast host — see
+> [Which entry point to import from](#which-entry-point-to-import-from).
+
+## What you get for free
+
+`showError` and `failToast` both guarantee, by construction:
+
+- **A Copy Error action.** An error the user can't copy is an error they can't report.
+- **Redaction before the text reaches the toast *or* the clipboard.** Bearer tokens,
+  labeled secrets, provider-shaped keys, JWTs, PEM blocks, AWS key ids, URL-authority
+  credentials, emails. This is the one worth caring about even if you skip the rest —
+  see below.
+- **Aborts swallowed.** A user typing the next keystroke cancels the in-flight request;
+  that isn't a failure and shouldn't toast.
+- **A clipboard payload richer than the toast** — title, message, stack frames, and any
+  request context you pass.
 
 ## Why this exists
 
@@ -36,50 +83,6 @@ knowing before the line-count argument:
 - **Zero runtime dependencies**, `@raycast/api` as a peer. Nothing to justify to a Store
   reviewer on bundle size.
 - **The compliant call is the shortest one.** That's the mechanism — not discipline.
-
-## Install
-
-```bash
-npm install @chrismessina/raycast-kit
-```
-
-## Which entry point to import from
-
-**Read this before your first import** — it's the one thing that will cost you time
-otherwise.
-
-```ts
-// UI layer (commands, views, actions) — has the Raycast runtime
-import { showError, failToast } from "@chrismessina/raycast-kit";
-
-// Pure logic, tests, scripts — NO @raycast/api available
-import { getErrorMessage, isAbortError } from "@chrismessina/raycast-kit/errors";
-import { countOf, plural } from "@chrismessina/raycast-kit/plural";
-```
-
-**Why the split:** `@raycast/api` ships **types only** — no loadable JavaScript. The
-Raycast host injects it at runtime, so it cannot resolve under plain `node`, `tsx`, or
-a test runner. The root export includes `showError`/`failToast`, which import it.
-
-**What breaks if you get it wrong:** importing the **root** into a module you test
-headlessly fails to resolve `@raycast/api` — and the error names `toast.js`, never this
-package's export map, so it doesn't look like an import-path problem:
-
-```
-Error: Cannot find module '@raycast/api'
-Require stack:
-- node_modules/@chrismessina/raycast-kit/dist/toast.js
-- node_modules/@chrismessina/raycast-kit/dist/index.js
-- src/utils/your-pure-module.ts
-```
-
-**The fix is one import path**, not a local copy of the helper: switch that module to
-`@chrismessina/raycast-kit/errors`. Every module has a subpath — `/errors`, `/plural`,
-`/toast` — and the root is just the convenience barrel.
-
-*(This is real: it cost the first adopter all 11 of a module's headless fixtures and a
-hand-rolled duplicate helper before they found the subpath. Hence this section's
-position.)*
 
 ## `showError(error, options)`
 
@@ -220,7 +223,7 @@ English splits them with no reliable pattern — `leaf`→`leaves` but `chef`→
 than the ternary it replaces. Anything outside the lists takes a plain `-s`; pass
 an explicit plural for the rest.
 
-## Entry points, in full
+## Which entry point to import from
 
 | Import from | Gives you | Needs the Raycast runtime? |
 | --- | --- | --- |
@@ -229,8 +232,27 @@ an explicit plural for the rest.
 | `@chrismessina/raycast-kit/errors` | `getErrorMessage`, `isAbortError`, `redactSecrets` | no |
 | `@chrismessina/raycast-kit/plural` | `countOf`, `plural` | no |
 
-See [Which entry point to import from](#which-entry-point-to-import-from) for the rule
-and the failure mode.
+**Why the split:** `@raycast/api` ships **types only** — no loadable JavaScript. The
+Raycast host injects it at runtime, so it cannot resolve under plain `node`, `tsx`, or
+a test runner. The root export includes `showError`/`failToast`, which import it.
+
+**What breaks if you get it wrong:** importing the **root** into a module you test
+headlessly fails to resolve `@raycast/api` — and the error names `toast.js`, never this
+package's export map, so it doesn't look like an import-path problem:
+
+```
+Error: Cannot find module '@raycast/api'
+Require stack:
+- node_modules/@chrismessina/raycast-kit/dist/toast.js
+- node_modules/@chrismessina/raycast-kit/dist/index.js
+- src/utils/your-pure-module.ts
+```
+
+**The fix is one import path**, not a local copy of the helper: switch that module to
+`@chrismessina/raycast-kit/errors`.
+
+*(This is real: it cost the first adopter all 11 of a module's headless fixtures and a
+hand-rolled duplicate helper before they found the subpath.)*
 
 ## Development
 
